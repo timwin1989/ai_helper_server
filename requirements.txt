@@ -1,0 +1,10 @@
+faiss-cpu
+beautifulsoup4>=4.12.0
+sentence-transformers
+PyMuPDF
+tqdm
+requests
+python-docx
+textract
+huggingface_hub
+nltk
