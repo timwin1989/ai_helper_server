@@ -65,7 +65,7 @@ def filter_similar_chunks(ranked_docs, threshold=0.85):
             filtered.append(doc)
     return filtered
 
-def search_by_title_summary(title_query: str, top_k=TOP_K):
+def search_by_title_summary(title_query: str, top_k=TOP_K, score_threshold=0.5):
     # Комбинируем заголовок и краткое содержание
     combined_texts = [
         f"{m.get('title', '')}. {m.get('summary', '')}".strip()
@@ -76,67 +76,102 @@ def search_by_title_summary(title_query: str, top_k=TOP_K):
     doc_vectors = model.encode(combined_texts)
     query_vector = model.encode([title_query])
 
-    # Временный индекс и поиск
+    # Временный FAISS-индекс и поиск
     temp_index = faiss.IndexFlatL2(doc_vectors.shape[1])
     temp_index.add(doc_vectors)
     distances, indices = temp_index.search(query_vector, top_k)
 
-    # Собираем результаты
+    # Собираем найденные документы
     retrieved = [metadata[i] for i in indices[0] if i < len(metadata)]
-    return retrieved
 
+    # Подготовка пар для ранжирования
+    pairs = [(title_query, doc["text"]) for doc in retrieved]
+    scores = reranker.predict(pairs)
 
-def search(query, title: str = "", top_k=TOP_K):
-    topic = extract_topic_from_query(query)
-    topic_matched = [m for m in metadata if m.get("topic") == topic] or metadata  # fallback на всё
+    # Привязываем score к документам и фильтруем
+    scored_docs = [(doc, score) for doc, score in zip(retrieved, scores) if score >= score_threshold]
+    ranked = sorted(scored_docs, key=lambda x: x[1], reverse=True)
 
-    # # Попытка 1: ищем только по title
-    # if title:
-    #     combined_texts = [m.get("title", "") for m in topic_matched]
-    #     vectors = model.encode(combined_texts)
-    #     query_vec = model.encode([title])
-    #     temp_index = faiss.IndexFlatL2(vectors.shape[1])
-    #     temp_index.add(vectors)
-    #     distances, indices = temp_index.search(query_vec, top_k)
+    return [doc for doc, _ in ranked]
+# def search_by_title_summary(title_query: str, top_k=TOP_K):
+#     # Комбинируем заголовок и краткое содержание
+#     combined_texts = [
+#         f"{m.get('title', '')}. {m.get('summary', '')}".strip()
+#         for m in metadata
+#     ]
 
-    #     retrieved = [topic_matched[i] for i in indices[0] if i < len(topic_matched)]
-    #     reranked = rerank_results(query, retrieved)
-    #     deduped = filter_similar_chunks(reranked)
+#     # Эмбеддинг запроса и документов
+#     doc_vectors = model.encode(combined_texts)
+#     query_vector = model.encode([title_query])
 
-    #     # Если ничего не нашли по заголовку — fallback на title + text
-    #     if deduped:
-    #         return deduped[:top_k]
+#     # Временный индекс и поиск
+#     temp_index = faiss.IndexFlatL2(doc_vectors.shape[1])
+#     temp_index.add(doc_vectors)  # type: ignore
+#     distances, indices = temp_index.search(query_vector, top_k)  # type: ignore
 
-    # Попытка 2: по title + text
+#     # Собираем результаты
+#     retrieved = [metadata[i] for i in indices[0] if i < len(metadata)]
+#     return retrieved
+
+# def search(query, title: str = "", top_k=TOP_K):
+#     topic = extract_topic_from_query(query)
+#     topic_matched = [m for m in metadata if m.get("topic") == topic] or metadata  # fallback на всё
+
+#     # # Попытка 1: ищем только по title
+#     # if title:
+#     #     combined_texts = [m.get("title", "") for m in topic_matched]
+#     #     vectors = model.encode(combined_texts)
+#     #     query_vec = model.encode([title])
+#     #     temp_index = faiss.IndexFlatL2(vectors.shape[1])
+#     #     temp_index.add(vectors)
+#     #     distances, indices = temp_index.search(query_vec, top_k)
+
+#     #     retrieved = [topic_matched[i] for i in indices[0] if i < len(topic_matched)]
+#     #     reranked = rerank_results(query, retrieved)
+#     #     deduped = filter_similar_chunks(reranked)
+
+#     #     # Если ничего не нашли по заголовку — fallback на title + text
+#     #     if deduped:
+#     #         return deduped[:top_k]
+
+#     # Попытка 2: по title + text
     
-    combined_texts = [f"{m.get('title', '')} {m.get('text', '')}".strip() for m in topic_matched]
-    query_vec = model.encode([query])
-    doc_vecs = model.encode(combined_texts)
+#     combined_texts = [f"{m.get('title', '')} {m.get('text', '')}".strip() for m in topic_matched]
+#     query_vec = model.encode([query])
+#     doc_vecs = model.encode(combined_texts)
 
-    temp_index = faiss.IndexFlatL2(doc_vecs.shape[1])
-    temp_index.add(doc_vecs)
-    distances, indices = temp_index.search(query_vec, top_k * 2)
+#     temp_index = faiss.IndexFlatL2(doc_vecs.shape[1])
+#     temp_index.add(doc_vecs)
+#     distances, indices = temp_index.search(query_vec, top_k * 2)
 
-    retrieved = []
-    for i in indices[0]:
-        if i < len(topic_matched):
-            doc = topic_matched[i]
-            doc["__combined_text__"] = combined_texts[i]
-            retrieved.append(doc)
+#     retrieved = []
+#     for i in indices[0]:
+#         if i < len(topic_matched):
+#             doc = topic_matched[i]
+#             doc["__combined_text__"] = combined_texts[i]
+#             retrieved.append(doc)
 
-    reranked = rerank_results(query, retrieved)
-    deduped = filter_similar_chunks(reranked)
+#     reranked = rerank_results(query, retrieved)
+#     deduped = filter_similar_chunks(reranked)
 
-    return deduped[:top_k]
+#     return deduped[:top_k]
 
-def rerank_results(query, retrieved):
+def rerank_results(query, retrieved, threshold=0.5):
     if not retrieved:
         return []
 
     pairs = [(query, doc["text"]) for doc in retrieved]
     scores = reranker.predict(pairs)
+
+    # Привязываем score к каждому документу
     scored_docs = list(zip(retrieved, scores))
-    ranked = sorted(scored_docs, key=lambda x: x[1], reverse=True)
+
+    # Отфильтровываем по порогу (по умолчанию 0.5)
+    filtered = [(doc, score) for doc, score in scored_docs if score >= threshold]
+
+    # Сортируем оставшиеся по score по убыванию
+    ranked = sorted(filtered, key=lambda x: x[1], reverse=True)
+
     return [doc for doc, _ in ranked]
 
 def query_ollama(prompt, model_ollama="mistral:instruct"):
@@ -235,28 +270,3 @@ def generate_answer(request_text, similar_docs, system_prompt: str, lang: str = 
             "ai_answer": query_ollama(system_prompt, prompt+f"""Ответ переведи на язык: {lang}"""),
             "fragments_list": fragments_list
         }
-
-# === Основной запуск ===
-if __name__ == "__main__":
-    request_files = list(REQUESTS_DIR.glob("*.pdf"))
-    if not request_files:
-        print("❌ В папке 'requests/' нет PDF-запросов.")
-        exit(1)
-
-    request_path = request_files[0]
-    request_text = extract_text_from_pdf(str(request_path))
-    print(f"\n📄 Обрабатывается запрос из файла: {request_path.name}")
-
-    retrieved_docs = search(request_text, "Заголовок")
-    similar_docs = [{"text": r["text"], "source": r.get("source", "неизвестный файл")} for r in retrieved_docs]
-
-    if not similar_docs:
-        print("❗ Ничего релевантного не найдено.")
-        similar_docs = [{"text": "(нет данных)", "source": "N/A"}]
-
-    final = generate_answer(request_text, similar_docs, "Русский", use_openai=True)
-
-    print("\n✅ Сгенерированный ответ:\n")
-    print(final)
-
-    save_html_to_pdf(final, "generateAnswer.pdf")

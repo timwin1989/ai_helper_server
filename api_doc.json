@@ -1,0 +1,124 @@
+{
+  "info": {
+    "_postman_id": "6d9d0947-9939-4bee-a621-cf0d7e63d689",
+    "name": "Ai Helper API",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "**Ai Helper REST API** – набор HTTP эндпоинтов для резюмирования документов, генерации официальных запросов, конвертации HTML в PDF/DOCX. Все эндпоинты возвращают данные в формате JSON.\n\nВ данной документации перечислены доступные эндпоинты, их параметры и примеры использования."
+  },
+  "item": [
+    {
+      "name": "POST /generate-request/",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "multipart/form-data"
+          }
+        ],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "file",
+              "type": "file",
+              "src": ""
+            },
+            {
+              "key": "short_context",
+              "value": "Пример темы запроса",
+              "type": "text"
+            },
+            {
+              "key": "lang",
+              "value": "ru",
+              "type": "text"
+            },
+            {
+              "key": "content_text",
+              "value": "Пример текста запроса...",
+              "type": "text"
+            }
+          ]
+        },
+        "url": {
+          "raw": "{{base_url}}/generate-request/"
+        },
+        "description": "**Описание:** Генерация текста официального депутатского запроса на основе введённых данных. Пользователь может приложить файл (PDF, DOC или DOCX) с текстом запроса или передать сам текст. Также требуется краткое описание темы запроса. Система выполняет поиск по базе документов по указанной теме и генерирует итоговый текст запроса на языке `lang` (HTML-код), а также PDF-файл с этим текстом:contentReference[oaicite:5]{index=5}. В ответе возвращается ссылка на сгенерированный PDF, HTML-текст запроса и другие данные.\n**Метод:** `POST`\n**Путь:** `/generate-request/`\n**Параметры:**\n- **Body (form-data):** поля формы:\n  - `file` (file, опционально) – файл с текстом запроса (поддерживаются форматы PDF, DOCX, DOC):contentReference[oaicite:6]{index=6}.\n  - `short_context` (string) – краткое описание темы или контекста запроса:contentReference[oaicite:7]{index=7}.\n  - `lang` (string) – язык, на котором нужен итоговый текст (например, `ru` или `kz`).\n  - `content_text` (string, опционально) – текст запроса, если файл не прикреплён:contentReference[oaicite:8]{index=8}.\n**Пример запроса (без файла):**\n```http\nPOST {{base_url}}/generate-request/\nContent-Type: multipart/form-data\n\n--boundary\nContent-Disposition: form-data; name=\"short_context\"\n\nПовышение пенсий ветеранам\n--boundary\nContent-Disposition: form-data; name=\"lang\"\n\nru\n--boundary\nContent-Disposition: form-data; name=\"content_text\"\n\nВ соответствии с законодательством...,\n--boundary--\n```\n*(Примечание: при отправке запроса через Postman необходимо выбрать Body тип `form-data`, добавить поля `short_context`, `lang`, `content_text` и/или `file`.)*\n**Пример ответа:**\n```json\n{\n    \"fragments_list\": [...],\n    \"text\": \"<p>Уважаемый ...</p>\",\n    \"pdf_url\": \"/answers/abcdef123456_answer.pdf\",\n    \"file_contenxt_source\": \"example.pdf\"\n}\n```\n**Возможные ответы:**\n- **200 OK:** Запрос успешно сгенерирован. Возвращается JSON с полями:\n  - `text` – HTML-текст сгенерированного запроса;\n  - `pdf_url` – URL для скачивания PDF-файла с запросом;\n  - `fragments_list` – список фрагментов документов, использованных для подготовки ответа;\n  - `file_contenxt_source` – название источника или `null`, если источников не было:contentReference[oaicite:9]{index=9}.\n- **400 Bad Request:** Некорректные данные запроса. Возможные причины: неподдерживаемый формат файла:contentReference[oaicite:10]{index=10} либо не передан ни файл, ни текст. В ответе возвращается поле `error` с описанием проблемы.\n- **500 Internal Server Error:** Внутренняя ошибка при обработке запроса (возвращается поле `error` с сообщением об ошибке):contentReference[oaicite:12]{index=12}."
+      },
+      "response": []
+    },
+    {
+      "name": "POST /generate-pdf-from-html/",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/x-www-form-urlencoded"
+          }
+        ],
+        "body": {
+          "mode": "urlencoded",
+          "urlencoded": [
+            {
+              "key": "html",
+              "value": "<p>Пример содержимого</p>",
+              "type": "text"
+            }
+          ]
+        },
+        "url": {
+          "raw": "{{base_url}}/generate-pdf-from-html/"
+        },
+        "description": "**Описание:** Конвертирует переданный HTML-код в PDF-файл:contentReference[oaicite:13]{index=13}. Возвращает ссылку на сгенерированный PDF.\n**Метод:** `POST`\n**Путь:** `/generate-pdf-from-html/`\n**Параметры:**\n- **Body (form-data):**\n  - `html` (string) – HTML-разметка, которую необходимо сохранить как PDF.\n**Пример запроса:**\n```http\nPOST {{base_url}}/generate-pdf-from-html/\nContent-Type: application/x-www-form-urlencoded\n\nhtml=<p>Пример содержимого</p>\n```\n**Пример ответа:**\n```json\n{\n    \"message\": \"✅ PDF создан из HTML\",\n    \"pdf_url\": \"/answers/123e4567e89b_from_html.pdf\"\n}\n```\n**Возможные ответы:**\n- **200 OK:** PDF успешно создан:contentReference[oaicite:14]{index=14}. В ответе возвращается сообщение об успехе и `pdf_url` с путем к файлу.\n- **500 Internal Server Error:** Ошибка при конвертации HTML (возвращается поле `error` с описанием ошибки)."
+      },
+      "response": []
+    },
+    {
+      "name": "POST /generate-docx-from-html/",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/x-www-form-urlencoded"
+          }
+        ],
+        "body": {
+          "mode": "urlencoded",
+          "urlencoded": [
+            {
+              "key": "html",
+              "value": "<p>Пример содержимого</p>",
+              "type": "text"
+            }
+          ]
+        },
+        "url": {
+          "raw": "{{base_url}}/generate-docx-from-html/"
+        },
+        "description": "**Описание:** Конвертирует HTML-код в документ формата DOCX (Microsoft Word):contentReference[oaicite:15]{index=15}. Возвращает ссылку на созданный DOCX-файл.\n**Метод:** `POST`\n**Путь:** `/generate-docx-from-html/`\n**Параметры:**\n- **Body (form-data):**\n  - `html` (string) – HTML-разметка, которую нужно сохранить как .docx.\n**Пример запроса:**\n```http\nPOST {{base_url}}/generate-docx-from-html/\nContent-Type: application/x-www-form-urlencoded\n\nhtml=<p>Пример содержимого</p>\n```\n**Пример ответа:**\n```json\n{\n    \"message\": \"✅ DOCX создан из HTML\",\n    \"docx_url\": \"/answers/123e4567e89b_from_html.docx\"\n}\n```\n**Возможные ответы:**\n- **200 OK:** DOCX успешно сформирован:contentReference[oaicite:16]{index=16}. Возвращается сообщение и `docx_url` с путем к файлу.\n- **500 Internal Server Error:** Ошибка при генерации DOCX (возвращается поле `error`)."
+      },
+      "response": []
+    },
+    {
+      "name": "GET /answers/{filename}",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{base_url}}/answers/<filename>"
+        },
+        "description": "**Описание:** Скачивание сгенерированных файлов. Эндпоинт отдаёт статические файлы из соответствующей директории на сервере:contentReference[oaicite:21]{index=21}.\n**Метод:** `GET`\n**Путь:** `/answers/{filename}` (а также `/pdfs/{filename}`)\n**Параметры:**\n- **Path:** `filename` – имя файла (PDF или DOCX), ранее сгенерированного и сохранённого на сервере.\n**Пример запроса:**\n```http\nGET {{base_url}}/answers/abcdef123456_answer.pdf\n```\n**Пример ответа:** В случае успешного запроса возвращается содержимое файла (PDF или DOCX) в бинарном виде.\n**Возможные ответы:**\n- **200 OK:** Файл найден и возвращён в ответе.\n- **404 Not Found:** Файл не найден на сервере."
+      },
+      "response": []
+    }
+  ],
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8000",
+      "type": "string"
+    }
+  ]
+}

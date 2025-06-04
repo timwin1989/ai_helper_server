@@ -100,7 +100,11 @@ async def summarize_request(data: SummarizeRequestParams):
             f.write(response.content)
 
         request_text = extract_text_from_pdf(str(temp_path))
-
+        if not request_text.strip():
+            return JSONResponse(
+                content={"error": "PDF-файл не содержит текст. Возможно, он состоит только из изображений."},
+                status_code=400
+            )
         summary = query_openai(system_promps, request_text+f"""Ответ переведи на язык: {lang}""")
         # if USE_OLLAMA:
         #     summary = summarize_with_ollama(translated_text)
@@ -141,11 +145,26 @@ async def generate_by_upload(
 
             if ext == "pdf":
                 request_text = extract_text_from_pdf(str(temp_path))
+                if not request_text.strip():
+                    return JSONResponse(
+                        content={"error": "PDF-файл не содержит текст. Возможно, он состоит только из изображений."},
+                        status_code=400
+                    )
             elif ext == "docx":
                 doc = Document(str(temp_path))
                 request_text = "\n".join([para.text for para in doc.paragraphs])
+                if not request_text.strip():
+                    return JSONResponse(
+                        content={"error": "docx-файл не содержит текст. Возможно, он состоит только из изображений."},
+                        status_code=400
+                    )
             elif ext == "doc":
                 request_text = extract_doc_text(str(temp_path))
+                if not request_text.strip():
+                    return JSONResponse(
+                        content={"error": "doc-файл не содержит текст. Возможно, он состоит только из изображений."},
+                        status_code=400
+                    )
             else:
                 return JSONResponse(content={"error": f"Неподдерживаемый формат: .{ext}"}, status_code=400)
 
